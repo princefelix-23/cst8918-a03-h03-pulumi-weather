@@ -1,25 +1,46 @@
 import * as pulumi from "@pulumi/pulumi";
+import * as resources from '@pulumi/azure-native/resources';
+import * as containerregistry from '@pulumi/azure-native/containerregistry';
 
-// Import the configuration settings for the current stack
-const config = new pulumi.Config();
+// Import the configuration settings for the current stack.
+const config = new pulumi.Config()
+const appPath = config.require('appPath')
+const prefixName = config.require('prefixName')
+const imageName = prefixName
+const imageTag = config.require('imageTag')
+// Azure container instances (ACI) service does not yet support port mapping
+// so, the containerPort and publicPort must be the same
+const containerPort = config.requireNumber('containerPort')
+const publicPort = config.requireNumber('publicPort')
+const cpu = config.requireNumber('cpu')
+const memory = config.requireNumber('memory')
 
-// Application path (relative to this file)
-const appPath = config.require('appPath');
+// Sanitize prefixName to remove non-alphanumeric characters for the registry name
+const sanitizedPrefixName = prefixName.replace(/[^a-zA-Z0-9]/g, "");
 
-// Prefix name for naming resources
-const prefixName = config.require('prefixName');
+// Create a resource group.
+const resourceGroup = new resources.ResourceGroup(`${prefixName}-rg`)
 
-// Image name (based on prefix)
-const imageName = prefixName;
+// Create the container registry.
+const registry = new containerregistry.Registry(`${sanitizedPrefixName}ACR`, {
+  resourceGroupName: resourceGroup.name,
+  adminUserEnabled: true,
+  sku: {
+    name: containerregistry.SkuName.Basic,
+  },
+})
 
-// Image tag (version)
-const imageTag = config.require('imageTag');
+// Get authentication credentials for the container registry
+const registryCredentials = containerregistry
+  .listRegistryCredentialsOutput({
+    resourceGroupName: resourceGroup.name,
+    registryName: registry.name,
+  })
+  .apply((creds) => {
+    return {
+      username: creds.username!,
+      password: creds.passwords![0].value!,
+    };
+  });
 
-// Azure container instances (ACI) service does not support port mapping,
-// so containerPort and publicPort must be the same
-const containerPort = config.requireNumber('containerPort');
-const publicPort = config.requireNumber('publicPort');
-
-// Resource limits for CPU and memory
-const cpu = config.requireNumber('cpu');
-const memory = config.requireNumber('memory');
+  
