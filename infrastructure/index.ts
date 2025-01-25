@@ -8,6 +8,8 @@ import * as containerinstance from '@pulumi/azure-native/containerinstance'
 const config = new pulumi.Config()
 const appPath = config.require('appPath')
 const prefixName = config.require('prefixName')
+// Sanitize prefixName to remove non-alphanumeric characters for the registry name
+const sanitizedPrefixName = prefixName.replace(/[^a-zA-Z0-9]/g, '')
 const imageName = prefixName
 const imageTag = config.require('imageTag')
 // Azure container instances (ACI) service does not yet support port mapping
@@ -16,9 +18,6 @@ const containerPort = config.requireNumber('containerPort')
 const publicPort = config.requireNumber('publicPort')
 const cpu = config.requireNumber('cpu')
 const memory = config.requireNumber('memory')
-
-// Sanitize prefixName to remove non-alphanumeric characters for the registry name
-const sanitizedPrefixName = prefixName.replace(/[^a-zA-Z0-9]/g, '')
 
 // Create a resource group.
 const resourceGroup = new resources.ResourceGroup(`${prefixName}-rg`)
@@ -46,7 +45,7 @@ const registryCredentials = containerregistry
   })
 
 // Define the container image for the service.
-const image = new docker.Image(`${prefixName}-image`, {
+const image = new docker.Image(`${sanitizedPrefixName}-image`, {
   imageName: pulumi.interpolate`${registry.loginServer}/${imageName}:${imageTag}`,
   build: {
     context: appPath,
